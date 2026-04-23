@@ -1,0 +1,139 @@
+======================================================================
+DeepSpeed CPU Adam vs Fused Adam LSQ 性能对比测试
+======================================================================
+CPU: ARM Neoverse-V2 (aarch64)
+数据类型: BF16
+测试参数: warmup=10, steps=100, repeat=5
+======================================================================
+======================================================================
+  参数量: 9663676416 elements (9216M)
+======================================================================
+
+--- group_size = 128 ---
+
+[Rep 1/5]
+  DeepSpeed CPU Adam: 945.773ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    908.601ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    650.773ms/step
+
+[Rep 2/5]
+  DeepSpeed CPU Adam: 1008.375ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    918.843ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    827.880ms/step
+
+[Rep 3/5]
+  DeepSpeed CPU Adam: 849.290ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    930.028ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    858.504ms/step
+
+[Rep 4/5]
+  DeepSpeed CPU Adam: 879.457ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    886.349ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    856.909ms/step
+
+[Rep 5/5]
+  DeepSpeed CPU Adam: 948.292ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    900.715ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    872.709ms/step
+
+性能汇总 (group_size=128, 5次平均 ± 标准差)
+  DeepSpeed CPU Adam: 926.237 ± 56.078 ms/step
+  Fused Adam INT8:    908.907 ± 14.973 ms/step
+  Fused Adam INT4:    813.355 ± 82.586 ms/step
+  INT8量化额外开销: +-17.330ms (-1.9%)
+  INT4量化额外开销: +-112.882ms (-12.2%)
+
+--- group_size = 1024 ---
+
+[Rep 1/5]
+  DeepSpeed CPU Adam: 1024.065ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    923.133ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    867.470ms/step
+
+[Rep 2/5]
+  DeepSpeed CPU Adam: 941.424ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    947.028ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    891.037ms/step
+
+[Rep 3/5]
+  DeepSpeed CPU Adam: 951.516ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    927.563ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    925.052ms/step
+
+[Rep 4/5]
+  DeepSpeed CPU Adam: 953.466ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    929.072ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    927.104ms/step
+
+[Rep 5/5]
+  DeepSpeed CPU Adam: 1016.374ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT8:    948.546ms/step
+Detected ARM aarch64 - using NEON SIMD
+  Fused Adam INT4:    939.240ms/step
+
+性能汇总 (group_size=1024, 5次平均 ± 标准差)
+  DeepSpeed CPU Adam: 977.369 ± 35.309 ms/step
+  Fused Adam INT8:    935.068 ± 10.577 ms/step
+  Fused Adam INT4:    909.981 ± 26.618 ms/step
+  INT8量化额外开销: +-42.300ms (-4.3%)
+  INT4量化额外开销: +-67.388ms (-6.9%)
+======================================================================
+Adam LSQ Optimizer #0 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #1 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #2 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #3 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #4 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #5 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #6 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #7 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #8 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #9 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #10 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #11 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #12 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #13 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #14 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #15 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #16 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #17 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #18 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
+Adam LSQ Optimizer #19 is created with NEON arithmetic capability.
+Config: alpha=0.001000, betas=(0.900000, 0.999000), weight_decay=0.000000, adam_w=1
