@@ -1,1 +1,7 @@
 DeepSpeed/
+__pycache__/
+*.pyc
+*.pyo
+.claude/
+log/
+*.nfs*
