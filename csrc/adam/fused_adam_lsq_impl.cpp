@@ -18,7 +18,7 @@ void Adam_LSQ_Optimizer::Step_1_LSQ(
     ds_state_precision_t *_exp_avg, ds_state_precision_t *_exp_avg_sq,
     uint8_t *_quant_data, LSQ_Params &lsq_params, size_t _param_size) {
   size_t rounded_size = 0;
-#if defined(__AVX512__) || defined(__AVX256__) || defined(__aarch64__)
+#if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
   Step_AVX_LSQ<1>(&rounded_size, _params, grads, _exp_avg, _exp_avg_sq,
                   _quant_data, lsq_params, _param_size);
 #endif
@@ -162,7 +162,7 @@ void Adam_LSQ_Optimizer::Step_4_LSQ(
     ds_state_precision_t *_exp_avg, ds_state_precision_t *_exp_avg_sq,
     uint8_t *_quant_data, LSQ_Params &lsq_params, size_t _param_size) {
   size_t rounded_size = 0;
-#if defined(__AVX512__) || defined(__AVX256__) || defined(__aarch64__)
+#if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
   Step_AVX_LSQ<4>(&rounded_size, _params, grads, _exp_avg, _exp_avg_sq,
                   _quant_data, lsq_params, _param_size);
 #endif
@@ -181,7 +181,7 @@ void Adam_LSQ_Optimizer::Step_8_LSQ(
     ds_state_precision_t *_exp_avg, ds_state_precision_t *_exp_avg_sq,
     uint8_t *_quant_data, LSQ_Params &lsq_params, size_t _param_size) {
   size_t rounded_size = 0;
-#if defined(__AVX512__) || defined(__AVX256__) || defined(__aarch64__)
+#if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
   Step_AVX_LSQ<8>(&rounded_size, _params, grads, _exp_avg, _exp_avg_sq,
                   _quant_data, lsq_params, _param_size);
 #endif
@@ -236,7 +236,7 @@ int create_adam_lsq_optimizer(int optimizer_id, float alpha, float betta1,
 
   if (should_log) {
     std::string simd_type = "";
-#if defined(__AVX512__)
+#if defined(__AVX512F__)
     simd_type = "AVX512";
 #elif defined(__AVX256__)
     simd_type = "AVX2";

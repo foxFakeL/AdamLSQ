@@ -14,7 +14,7 @@
 //=============================================================================
 #if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
 
-#if defined(__AVX512__) || defined(__AVX256__)
+#if defined(__AVX512F__) || defined(__AVX256__)
 #include <immintrin.h>
 
 template <typename T>
@@ -28,7 +28,7 @@ inline void writeAs(void* dst, const T& val) {
     std::memcpy(dst, &val, sizeof(T));
 }
 
-#if defined(__AVX512__)
+#if defined(__AVX512F__)
 #define SIMD_STORE(a, d) _mm512_storeu_ps(a, d)
 #define SIMD_LOAD(x) _mm512_loadu_ps(x)
 #define SIMD_SET(x) _mm512_set1_ps(x)
@@ -60,7 +60,7 @@ inline void writeAs(void* dst, const T& val) {
 #endif
 
 union AVX_Data {
-#if defined(__AVX512__)
+#if defined(__AVX512F__)
     __m512 data;
 #elif defined(__AVX256__)
     __m256 data;
@@ -264,7 +264,7 @@ inline void pack_int4_neon(uint8_t* dst, float32x4_t vals0, float32x4_t vals1, f
 //=============================================================================
 // Scalar Fallback
 //=============================================================================
-#if !defined(__AVX512__) && !defined(__AVX256__) && !defined(__aarch64__)
+#if !defined(__AVX512F__) && !defined(__AVX256__) && !defined(__aarch64__)
 
 #define SIMD_WIDTH 1
 

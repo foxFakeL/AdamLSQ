@@ -48,7 +48,7 @@ public:
   int get_q_bits() const { return _q_bits; }
 
 // SIMD implementation of fused Adam + LSQ (AVX512/AVX2/NEON)
-#if defined(__AVX512__) || defined(__AVX256__) || defined(__aarch64__)
+#if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
   template <int span, typename ds_params_precision_t,
             typename ds_state_precision_t>
   void Step_AVX_LSQ(size_t *rounded_size, ds_params_precision_t *_params,
@@ -135,7 +135,7 @@ private:
 };
 
 // SIMD implementation of fused Adam + LSQ (AVX512/AVX2/NEON)
-#if defined(__AVX512__) || defined(__AVX256__) || defined(__aarch64__)
+#if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
 template <int span, typename ds_params_precision_t,
           typename ds_state_precision_t>
 void Adam_LSQ_Optimizer::Step_AVX_LSQ(
@@ -144,7 +144,7 @@ void Adam_LSQ_Optimizer::Step_AVX_LSQ(
     ds_state_precision_t *_exp_avg_sq, uint8_t *_quant_data,
     LSQ_Params &lsq_params, size_t _param_size) {
 
-#if !defined(__AVX512__) && !defined(__aarch64__)
+#if !defined(__AVX512F__) && !defined(__aarch64__)
   if (std::is_same_v<ds_params_precision_t, c10::BFloat16> ||
       std::is_same_v<ds_state_precision_t, c10::BFloat16>) {
     // AVX2 doesn't support BF16 well, fall back to scalar
@@ -206,7 +206,7 @@ void Adam_LSQ_Optimizer::Step_AVX_LSQ(
     float32x4_t zero_v = vdupq_n_f32(0.0f);
     float32x4_t max_v =
         (lsq_params.q_bits == 8) ? vdupq_n_f32(255.0f) : vdupq_n_f32(15.0f);
-#elif defined(__AVX512__)
+#elif defined(__AVX512F__)
     AVX_Data z_v, delta_inv_v, zero_v, max_v_local;
     z_v.data = SIMD_SET(z_g);
     delta_inv_v.data = SIMD_SET(1.0f / delta_g);
@@ -225,7 +225,7 @@ void Adam_LSQ_Optimizer::Step_AVX_LSQ(
 #if defined(__aarch64__)
         z_v = vdupq_n_f32(z_g);
         delta_inv_v = vdupq_n_f32(1.0f / delta_g);
-#elif defined(__AVX512__)
+#elif defined(__AVX512F__)
         z_v.data = SIMD_SET(z_g);
         delta_inv_v.data = SIMD_SET(1.0f / delta_g);
 #endif
@@ -320,7 +320,7 @@ void Adam_LSQ_Optimizer::Step_AVX_LSQ(
           asm volatile("str %0, [%1]" : : "r"(vget_lane_u64(data64, 0)), "r"(dst64) : "memory");
         }
       }
-#elif defined(__AVX512__)
+#elif defined(__AVX512F__)
       if (lsq_params.q_bits == 8) {
         for (int s = 0; s < span; s++) {
           AVX_Data sub_v, scaled_v, rounded_v, clamped_v;
