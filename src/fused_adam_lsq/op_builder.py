@@ -19,16 +19,20 @@ class TorchCPUOpBuilder:
         self.name = name
         self.jit_mode = False
         self.build_for_cpu = False
+        # Get the base path of this module (fuse_opt root)
+        self.base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     def absolute_name(self):
         return f'fused_adam_lsq.{self.name}_op'
 
     def sources(self):
-        return ['csrc/adam/fused_adam_lsq.cpp',
-                'csrc/adam/fused_adam_lsq_impl.cpp']
+        # Use absolute paths based on module location
+        return [os.path.join(self.base_path, 'csrc/adam/fused_adam_lsq.cpp'),
+                os.path.join(self.base_path, 'csrc/adam/fused_adam_lsq_impl.cpp')]
 
     def include_paths(self):
-        return ['csrc/includes']
+        # Use absolute paths based on module location
+        return [os.path.join(self.base_path, 'csrc/includes')]
 
     def cxx_args(self):
         args = ['-O3', '-std=c++17', '-g', '-Wno-reorder']
@@ -101,12 +105,7 @@ class FusedAdamLSQBuilder(TorchCPUOpBuilder):
     def __init__(self):
         super().__init__(name=self.NAME)
 
-    def sources(self):
-        return ['csrc/adam/fused_adam_lsq.cpp',
-                'csrc/adam/fused_adam_lsq_impl.cpp']
-
-    def include_paths(self):
-        return ['csrc/includes']
+    # sources() and include_paths() inherited from parent with correct base_path
 
     def cxx_args(self):
         args = super().cxx_args()

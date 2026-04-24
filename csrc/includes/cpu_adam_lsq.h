@@ -331,7 +331,8 @@ void Adam_LSQ_Optimizer::Step_AVX_LSQ(
               SIMD_MAX(zero_v.data, SIMD_MIN(rounded_v.data, max_v_local.data));
           __m512i q_int = _mm512_cvttps_epi32(clamped_v.data);
           __m128i q_8 = _mm512_cvtepi32_epi8(q_int);
-          _mm_storeu_si128((__m128i *)(_quant_data + i + s * SIMD_WIDTH), q_8);
+          // 非时序存储：避免RFO写惩罚，绕过Cache直接写入内存
+          _mm_stream_si128((__m128i *)(_quant_data + i + s * SIMD_WIDTH), q_8);
         }
       } else {
         for (int s = 0; s < span; s += 2) {
@@ -355,30 +356,41 @@ void Adam_LSQ_Optimizer::Step_AVX_LSQ(
 
           __m128i q0_shifted = _mm_mullo_epi16(q0_8, _mm_set1_epi16(16));
           __m128i packed_int4 = _mm_or_si128(q0_shifted, q1_8);
-          _mm_storel_epi64((__m128i *)(_quant_data + (i + s * SIMD_WIDTH) / 2),
-                           packed_int4);
+          // 非时序存储：避免RFO写惩罚
+          // 提取低64位写入（INT4打包后是8字节）
+          _mm_stream_si64((long long *)(_quant_data + (i + s * SIMD_WIDTH) / 2),
+                           _mm_cvtsi128_si64(packed_int4));
         }
       }
 #else
-      for (int s = 0; s < span; s++) {
-        float vals[SIMD_WIDTH];
-        SIMD_STORE(vals, param_4[s].data);
-        if (lsq_params.q_bits == 8) {
-          for (int w = 0; w < SIMD_WIDTH; w++) {
-            float q = (vals[w] - z_g) / delta_g;
-            q = round_int(q);
-            q = clamp_quant(q, 0.0f, 255.0f);
-            _quant_data[i + s * SIMD_WIDTH + w] = (uint8_t)q;
-          }
-        } else {
-          for (int w = 0; w < SIMD_WIDTH; w += 2) {
-            float q1 = (vals[w] - z_g) / delta_g;
-            float q2 = (vals[w + 1] - z_g) / delta_g;
+      // Scalar fallback: SIMD_WIDTH=1, span=8
+      // INT8可以并行，INT4需要串行处理相邻元素对
+      if (lsq_params.q_bits == 8) {
+#pragma omp parallel for schedule(static)
+        for (int s = 0; s < span; s++) {
+          float val = (float)param_4[s].data;  // SIMD_WIDTH=1, 直接取float
+          float q = (val - z_g) / delta_g;
+          q = round_int(q);
+          q = clamp_quant(q, 0.0f, 255.0f);
+          _quant_data[i + s] = (uint8_t)q;  // s*SIMD_WIDTH = s*1 = s
+        }
+      } else {
+        // INT4: 串行处理相邻元素对（避免数据竞争）
+        // span=8, 处理(s, s+1)打包成1字节
+        for (int s = 0; s < span; s += 2) {
+          float val0 = (float)param_4[s].data;
+          float q0 = (val0 - z_g) / delta_g;
+          q0 = clamp_quant(round_int(q0), 0.0f, 15.0f);
+
+          float q1 = 0.0f;
+          if (s + 1 < span) {
+            float val1 = (float)param_4[s + 1].data;
+            q1 = (val1 - z_g) / delta_g;
             q1 = clamp_quant(round_int(q1), 0.0f, 15.0f);
-            q2 = clamp_quant(round_int(q2), 0.0f, 15.0f);
-            _quant_data[(i + s * SIMD_WIDTH + w) / 2] =
-                ((uint8_t)((int)q1) << 4) | (uint8_t)((int)q2);
           }
+
+          // 打包：(q0 << 4) | q1
+          _quant_data[(i + s) / 2] = ((uint8_t)((int)q0) << 4) | (uint8_t)((int)q1);
         }
       }
 #endif

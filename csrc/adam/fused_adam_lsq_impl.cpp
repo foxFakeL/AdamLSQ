@@ -194,22 +194,16 @@ void Adam_LSQ_Optimizer::Step_8_LSQ(
   }
 }
 
-// 优化：移除dispatch map和std::function，使用直接switch调用
-// 原方案：map查找 + std::function间接调用 → 开销~3us/step
-// 新方案：直接switch + 模板函数调用 → 开销~0.1us/step
-
-// 直接调用函数（无dispatch开销）
 inline void invoke_lsq_direct(std::shared_ptr<Adam_LSQ_Optimizer> opt,
                               void *params, void *grads, void *exp_avg,
                               void *exp_avg_sq, uint8_t *quant_data,
                               LSQ_Params &lsq_params, size_t param_size,
                               c10::ScalarType params_type,
                               c10::ScalarType state_type) {
-  // 使用switch而非map查找，编译器可优化为直接跳转
   switch (params_type) {
     case c10::ScalarType::BFloat16:
       if (state_type == c10::ScalarType::Float) {
-        // BF16 params + FP32 state（最常见情况）
+        // BF16 params + FP32 state
         opt->Step_8_LSQ((c10::BFloat16 *)params, (c10::BFloat16 *)grads,
                         (float *)exp_avg, (float *)exp_avg_sq, quant_data,
                         lsq_params, param_size);
@@ -252,10 +246,6 @@ int create_adam_lsq_optimizer(int optimizer_id, float alpha, float betta1,
     simd_type = "scalar";
 #endif
 
-    printf("Adam LSQ Optimizer #%d is created with %s arithmetic capability.\n",
-           optimizer_id, simd_type.c_str());
-    printf("Config: alpha=%f, betas=(%f, %f), weight_decay=%f, adam_w=%d\n",
-           alpha, betta1, betta2, weight_decay, (int)adamw_mode);
   }
 
   return 0;
