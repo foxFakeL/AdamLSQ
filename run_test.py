@@ -18,6 +18,7 @@ def test_basic():
     # 创建测试参数
     param_size = 1024
     group_size = 128
+    num_groups = param_size // group_size
 
     # BF16权重
     params = torch.randn(param_size, dtype=torch.bfloat16, device='cpu')
@@ -27,10 +28,18 @@ def test_basic():
     print("\n[INT8量化测试]")
     model_params = [params.clone().requires_grad_()]
     optimizer = FusedAdamLSQ(model_params, lr=1e-3, group_size=group_size, q_bits=8)
+
+    # 手动设置buffer
+    quant_buffer = torch.zeros(param_size, dtype=torch.uint8)
+    delta = torch.ones(num_groups, dtype=torch.float32)
+    z = torch.zeros(num_groups, dtype=torch.float32)
+    optimizer.set_quant_buffer(model_params[0], quant_buffer)
+    optimizer.set_delta_tensor(model_params[0], delta)
+    optimizer.set_z_tensor(model_params[0], z)
+
     model_params[0].grad = grads.clone()
     optimizer.step()
 
-    quant_buffer = optimizer.get_quant_buffer(model_params[0])
     print(f"  量化buffer大小: {quant_buffer.shape}")
     print(f"  量化值范围: [{quant_buffer.min().item()}, {quant_buffer.max().item()}]")
 
@@ -44,10 +53,18 @@ def test_basic():
     print("\n[INT4量化测试]")
     model_params2 = [params.clone().requires_grad_()]
     optimizer2 = FusedAdamLSQ(model_params2, lr=1e-3, group_size=group_size, q_bits=4)
+
+    # 手动设置buffer (INT4需要param_size/2的buffer)
+    quant_buffer2 = torch.zeros(param_size // 2, dtype=torch.uint8)
+    delta2 = torch.ones(num_groups, dtype=torch.float32)
+    z2 = torch.zeros(num_groups, dtype=torch.float32)
+    optimizer2.set_quant_buffer(model_params2[0], quant_buffer2)
+    optimizer2.set_delta_tensor(model_params2[0], delta2)
+    optimizer2.set_z_tensor(model_params2[0], z2)
+
     model_params2[0].grad = grads.clone()
     optimizer2.step()
 
-    quant_buffer2 = optimizer2.get_quant_buffer(model_params2[0])
     print(f"  量化buffer大小: {quant_buffer2.shape} (预期: {param_size // 2})")
 
     # 解包验证
@@ -118,9 +135,20 @@ def test_performance():
     for size in sizes:
         params = torch.randn(size, dtype=torch.bfloat16, device='cpu')
         grads = torch.randn(size, dtype=torch.bfloat16, device='cpu') * 0.01
+        group_size = 128
+        num_groups = size // group_size
 
         model_params = [params.clone().requires_grad_()]
-        optimizer = FusedAdamLSQ(model_params, lr=1e-3, group_size=128, q_bits=8)
+        optimizer = FusedAdamLSQ(model_params, lr=1e-3, group_size=group_size, q_bits=8)
+
+        # 手动设置buffer
+        quant_buffer = torch.zeros(size, dtype=torch.uint8)
+        delta = torch.ones(num_groups, dtype=torch.float32)
+        z = torch.zeros(num_groups, dtype=torch.float32)
+        optimizer.set_quant_buffer(model_params[0], quant_buffer)
+        optimizer.set_delta_tensor(model_params[0], delta)
+        optimizer.set_z_tensor(model_params[0], z)
+
         model_params[0].grad = grads.clone()
 
         # 预热
@@ -148,6 +176,7 @@ def test_vs_separate():
 
     size = 10240
     group_size = 128
+    num_groups = size // group_size
 
     # 创建相同的数据
     params1 = torch.randn(size, dtype=torch.bfloat16, device='cpu')
@@ -157,6 +186,15 @@ def test_vs_separate():
     # 融合版本
     model_params1 = [params1.clone().requires_grad_()]
     opt1 = FusedAdamLSQ(model_params1, lr=1e-3, group_size=group_size, q_bits=8)
+
+    # 手动设置buffer
+    quant_buffer1 = torch.zeros(size, dtype=torch.uint8)
+    delta1 = torch.ones(num_groups, dtype=torch.float32)
+    z1 = torch.zeros(num_groups, dtype=torch.float32)
+    opt1.set_quant_buffer(model_params1[0], quant_buffer1)
+    opt1.set_delta_tensor(model_params1[0], delta1)
+    opt1.set_z_tensor(model_params1[0], z1)
+
     model_params1[0].grad = grads.clone()
 
     start = time.time()

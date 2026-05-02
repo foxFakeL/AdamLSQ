@@ -47,8 +47,6 @@ class TorchCPUOpBuilder:
         if machine == 'aarch64' or machine == 'arm64':
             # ARM NEON is always available on aarch64
             args.append('-march=native')
-            # NEON is implied in aarch64, no extra flag needed
-            print("Detected ARM aarch64 - using NEON SIMD")
         elif machine == 'x86_64' or machine == 'i386' or machine == 'i686':
             args.append('-march=native')
             try:

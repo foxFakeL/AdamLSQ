@@ -16,11 +16,12 @@ template <typename ds_params_precision_t, typename ds_state_precision_t>
 void Adam_LSQ_Optimizer::Step_1_LSQ(
     ds_params_precision_t *_params, ds_params_precision_t *grads,
     ds_state_precision_t *_exp_avg, ds_state_precision_t *_exp_avg_sq,
-    uint8_t *_quant_data, LSQ_Params &lsq_params, size_t _param_size) {
+    uint8_t *_quant_data, float *delta, float *z, int group_size, int q_bits,
+    size_t _param_size) {
   size_t rounded_size = 0;
 #if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
   Step_AVX_LSQ<1>(&rounded_size, _params, grads, _exp_avg, _exp_avg_sq,
-                  _quant_data, lsq_params, _param_size);
+                  _quant_data, delta, z, group_size, q_bits, _param_size);
 #endif
 
   if (_param_size > rounded_size) {
@@ -28,12 +29,12 @@ void Adam_LSQ_Optimizer::Step_1_LSQ(
     float betta2_minus1 = 1 - _betta2;
     float step_size = -1 * _alpha / _bias_correction1;
     float w_decay = -1 * _alpha * _weight_decay;
-    int q_max = lsq_params.q_bits == 4 ? 15 : 255;
+    int q_max = q_bits == 4 ? 15 : 255;
 
     // === 正确性修复：INT4需要串行处理相邻元素对，避免数据竞争 ===
     // INT8: 可以按元素并行（每个元素独立量化）
     // INT4: 必须按元素对串行处理（k和k+1必须在同一线程内完成Adam+量化）
-    size_t stride = (lsq_params.q_bits == 4) ? 2 : 1;
+    size_t stride = (q_bits == 4) ? 2 : 1;
 
     for (size_t t = rounded_size; t < _param_size; t += TILE) {
       size_t copy_size = TILE;
@@ -43,7 +44,7 @@ void Adam_LSQ_Optimizer::Step_1_LSQ(
 
       // INT8: parallel for (safe)
       // INT4: serial loop (k and k+1 must be processed together)
-      if (lsq_params.q_bits == 8) {
+      if (q_bits == 8) {
 #pragma omp parallel for schedule(static)
         for (size_t k = t; k < offset; k++) {
           float grad = (float)grads[k];
@@ -71,8 +72,8 @@ void Adam_LSQ_Optimizer::Step_1_LSQ(
           _exp_avg[k] = momentum;
           _exp_avg_sq[k] = variance;
 
-          int group_id = k / lsq_params.group_size;
-          float q = (param - lsq_params.z[group_id]) / lsq_params.delta[group_id];
+          int group_id = k / group_size;
+          float q = (param - z[group_id]) / delta[group_id];
           q = round_int(q);
           q = clamp_quant(q, 0.0f, (float)q_max);
           _quant_data[k] = (uint8_t)q;
@@ -107,8 +108,8 @@ void Adam_LSQ_Optimizer::Step_1_LSQ(
           _exp_avg[k] = momentum0;
           _exp_avg_sq[k] = variance0;
 
-          int group_id0 = k / lsq_params.group_size;
-          float q0 = (param0 - lsq_params.z[group_id0]) / lsq_params.delta[group_id0];
+          int group_id0 = k / group_size;
+          float q0 = (param0 - z[group_id0]) / delta[group_id0];
           q0 = round_int(q0);
           q0 = clamp_quant(q0, 0.0f, 15.0f);
 
@@ -139,8 +140,8 @@ void Adam_LSQ_Optimizer::Step_1_LSQ(
             _exp_avg[k + 1] = momentum1;
             _exp_avg_sq[k + 1] = variance1;
 
-            int group_id1 = (k + 1) / lsq_params.group_size;
-            float q1 = (param1 - lsq_params.z[group_id1]) / lsq_params.delta[group_id1];
+            int group_id1 = (k + 1) / group_size;
+            float q1 = (param1 - z[group_id1]) / delta[group_id1];
             q1 = round_int(q1);
             q1 = clamp_quant(q1, 0.0f, 15.0f);
 
@@ -160,18 +161,18 @@ template <typename ds_params_precision_t, typename ds_state_precision_t>
 void Adam_LSQ_Optimizer::Step_4_LSQ(
     ds_params_precision_t *_params, ds_params_precision_t *grads,
     ds_state_precision_t *_exp_avg, ds_state_precision_t *_exp_avg_sq,
-    uint8_t *_quant_data, LSQ_Params &lsq_params, size_t _param_size) {
+    uint8_t *_quant_data, float *delta, float *z, int group_size, int q_bits,
+    size_t _param_size) {
   size_t rounded_size = 0;
 #if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
   Step_AVX_LSQ<4>(&rounded_size, _params, grads, _exp_avg, _exp_avg_sq,
-                  _quant_data, lsq_params, _param_size);
+                  _quant_data, delta, z, group_size, q_bits, _param_size);
 #endif
   if (_param_size > rounded_size) {
     Step_1_LSQ((_params + rounded_size), (grads + rounded_size),
                (_exp_avg + rounded_size), (_exp_avg_sq + rounded_size),
-               (_quant_data +
-                (lsq_params.q_bits == 4 ? rounded_size / 2 : rounded_size)),
-               lsq_params, (_param_size - rounded_size));
+               (_quant_data + (q_bits == 4 ? rounded_size / 2 : rounded_size)),
+               delta, z, group_size, q_bits, (_param_size - rounded_size));
   }
 }
 
@@ -179,25 +180,26 @@ template <typename ds_params_precision_t, typename ds_state_precision_t>
 void Adam_LSQ_Optimizer::Step_8_LSQ(
     ds_params_precision_t *_params, ds_params_precision_t *grads,
     ds_state_precision_t *_exp_avg, ds_state_precision_t *_exp_avg_sq,
-    uint8_t *_quant_data, LSQ_Params &lsq_params, size_t _param_size) {
+    uint8_t *_quant_data, float *delta, float *z, int group_size, int q_bits,
+    size_t _param_size) {
   size_t rounded_size = 0;
 #if defined(__AVX512F__) || defined(__AVX256__) || defined(__aarch64__)
   Step_AVX_LSQ<8>(&rounded_size, _params, grads, _exp_avg, _exp_avg_sq,
-                  _quant_data, lsq_params, _param_size);
+                  _quant_data, delta, z, group_size, q_bits, _param_size);
 #endif
   if (_param_size > rounded_size) {
     Step_4_LSQ((_params + rounded_size), (grads + rounded_size),
                (_exp_avg + rounded_size), (_exp_avg_sq + rounded_size),
-               (_quant_data +
-                (lsq_params.q_bits == 4 ? rounded_size / 2 : rounded_size)),
-               lsq_params, (_param_size - rounded_size));
+               (_quant_data + (q_bits == 4 ? rounded_size / 2 : rounded_size)),
+               delta, z, group_size, q_bits, (_param_size - rounded_size));
   }
 }
 
 inline void invoke_lsq_direct(std::shared_ptr<Adam_LSQ_Optimizer> opt,
                               void *params, void *grads, void *exp_avg,
                               void *exp_avg_sq, uint8_t *quant_data,
-                              LSQ_Params &lsq_params, size_t param_size,
+                              float *delta, float *z, int group_size, int q_bits,
+                              size_t param_size,
                               c10::ScalarType params_type,
                               c10::ScalarType state_type) {
   switch (params_type) {
@@ -206,12 +208,12 @@ inline void invoke_lsq_direct(std::shared_ptr<Adam_LSQ_Optimizer> opt,
         // BF16 params + FP32 state
         opt->Step_8_LSQ((c10::BFloat16 *)params, (c10::BFloat16 *)grads,
                         (float *)exp_avg, (float *)exp_avg_sq, quant_data,
-                        lsq_params, param_size);
+                        delta, z, group_size, q_bits, param_size);
       } else if (state_type == c10::ScalarType::BFloat16) {
         // BF16 params + BF16 state
         opt->Step_8_LSQ((c10::BFloat16 *)params, (c10::BFloat16 *)grads,
                         (c10::BFloat16 *)exp_avg, (c10::BFloat16 *)exp_avg_sq,
-                        quant_data, lsq_params, param_size);
+                        quant_data, delta, z, group_size, q_bits, param_size);
       } else {
         throw std::runtime_error("Unsupported state type for BF16 params");
       }
@@ -219,7 +221,8 @@ inline void invoke_lsq_direct(std::shared_ptr<Adam_LSQ_Optimizer> opt,
     case c10::ScalarType::Float:
       // FP32 params + FP32 state
       opt->Step_8_LSQ((float *)params, (float *)grads, (float *)exp_avg,
-                      (float *)exp_avg_sq, quant_data, lsq_params, param_size);
+                      (float *)exp_avg_sq, quant_data,
+                      delta, z, group_size, q_bits, param_size);
       break;
     default:
       throw std::runtime_error("Unsupported params type");
@@ -234,39 +237,17 @@ int create_adam_lsq_optimizer(int optimizer_id, float alpha, float betta1,
 
   s_optimizers_lsq[optimizer_id] = opt;
 
-  if (should_log) {
-    std::string simd_type = "";
-#if defined(__AVX512F__)
-    simd_type = "AVX512";
-#elif defined(__AVX256__)
-    simd_type = "AVX2";
-#elif defined(__aarch64__)
-    simd_type = "NEON";
-#else
-    simd_type = "scalar";
-#endif
-
-  }
-
   return 0;
 }
 
-// Register quantization parameters (delta and z) - called once during initialization
-int register_quant_params_lsq(int optimizer_id, torch::Tensor &delta,
-                              torch::Tensor &z, int group_size, int q_bits) {
-  auto opt = std::static_pointer_cast<Adam_LSQ_Optimizer>(
-      s_optimizers_lsq[optimizer_id]);
-  opt->register_quant_params(delta.data_ptr<float>(), z.data_ptr<float>(),
-                             group_size, q_bits);
-  return 0;
-}
-
-// Main step function - optimized: delta and z stored internally, only pass quant_data
+// Main step function with LSQ - 无状态架构：每次传入所有参数
 int ds_adam_step_lsq(int optimizer_id, size_t step, float lr, float beta1,
                      float beta2, float epsilon, float weight_decay,
                      bool bias_correction, torch::Tensor &params,
                      torch::Tensor &grads, torch::Tensor &exp_avg,
-                     torch::Tensor &exp_avg_sq, torch::Tensor &quant_data) {
+                     torch::Tensor &exp_avg_sq, torch::Tensor &quant_data,
+                     torch::Tensor &delta, torch::Tensor &z,
+                     int group_size, int q_bits) {
   std::shared_ptr<Adam_LSQ_Optimizer> opt =
       std::static_pointer_cast<Adam_LSQ_Optimizer>(
           s_optimizers_lsq[optimizer_id]);
@@ -274,19 +255,73 @@ int ds_adam_step_lsq(int optimizer_id, size_t step, float lr, float beta1,
   opt->IncrementStep(step, beta1, beta2);
   opt->update_state(lr, epsilon, weight_decay, bias_correction);
 
-  // Use internal delta/z pointers (registered during initialization)
-  LSQ_Params lsq_params;
-  lsq_params.delta = opt->get_delta_ptr();
-  lsq_params.z = opt->get_z_ptr();
-  lsq_params.group_size = opt->get_group_size();
-  lsq_params.q_bits = opt->get_q_bits();
-
   c10::ScalarType params_type = at::typeMetaToScalarType(params.options().dtype());
   c10::ScalarType state_type = at::typeMetaToScalarType(exp_avg.options().dtype());
 
   invoke_lsq_direct(opt, params.data_ptr(), grads.data_ptr(), exp_avg.data_ptr(),
                     exp_avg_sq.data_ptr(), quant_data.data_ptr<uint8_t>(),
-                    lsq_params, params.numel(), params_type, state_type);
+                    delta.data_ptr<float>(), z.data_ptr<float>(),
+                    group_size, q_bits, params.numel(), params_type, state_type);
+
+  return 0;
+}
+
+// Step function without quantization - only Adam update
+int ds_adam_step(int optimizer_id, size_t step, float lr, float beta1,
+                 float beta2, float epsilon, float weight_decay,
+                 bool bias_correction, torch::Tensor &params,
+                 torch::Tensor &grads, torch::Tensor &exp_avg,
+                 torch::Tensor &exp_avg_sq) {
+  std::shared_ptr<Adam_LSQ_Optimizer> opt =
+      std::static_pointer_cast<Adam_LSQ_Optimizer>(
+          s_optimizers_lsq[optimizer_id]);
+
+  opt->IncrementStep(step, beta1, beta2);
+  opt->update_state(lr, epsilon, weight_decay, bias_correction);
+
+  c10::ScalarType params_type = at::typeMetaToScalarType(params.options().dtype());
+  c10::ScalarType state_type = at::typeMetaToScalarType(exp_avg.options().dtype());
+
+  // 直接调用Adam更新，不创建dummy buffer
+  // 使用单元素dummy delta/z，避免大规模内存分配
+  float dummy_delta = 1.0f;
+  float dummy_z = 0.0f;
+
+  // 使用param_size作为group_size（所有元素在同一个组）
+  // 这样只需要单元素的delta/z，避免创建大数组
+  size_t param_size = params.numel();
+
+  switch (params_type) {
+    case c10::ScalarType::BFloat16:
+      if (state_type == c10::ScalarType::Float) {
+        // 调用内部Adam-only更新（不量化）
+        opt->Step_8_LSQ((c10::BFloat16 *)params.data_ptr(),
+                        (c10::BFloat16 *)grads.data_ptr(),
+                        (float *)exp_avg.data_ptr(),
+                        (float *)exp_avg_sq.data_ptr(),
+                        nullptr,  // quant_data不写入
+                        &dummy_delta, &dummy_z,
+                        param_size, 8, param_size);
+      } else {
+        opt->Step_8_LSQ((c10::BFloat16 *)params.data_ptr(),
+                        (c10::BFloat16 *)grads.data_ptr(),
+                        (c10::BFloat16 *)exp_avg.data_ptr(),
+                        (c10::BFloat16 *)exp_avg_sq.data_ptr(),
+                        nullptr, &dummy_delta, &dummy_z,
+                        param_size, 8, param_size);
+      }
+      break;
+    case c10::ScalarType::Float:
+      opt->Step_8_LSQ((float *)params.data_ptr(),
+                      (float *)grads.data_ptr(),
+                      (float *)exp_avg.data_ptr(),
+                      (float *)exp_avg_sq.data_ptr(),
+                      nullptr, &dummy_delta, &dummy_z,
+                      param_size, 8, param_size);
+      break;
+    default:
+      throw std::runtime_error("Unsupported params type");
+  }
 
   return 0;
 }
