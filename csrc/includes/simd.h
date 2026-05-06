@@ -40,7 +40,9 @@ inline void writeAs(void* dst, const T& val) {
 #define SIMD_DIV(x, y) _mm512_div_ps(x, y)
 #define SIMD_MAX(x, y) _mm512_max_ps(x, y)
 #define SIMD_MIN(x, y) _mm512_min_ps(x, y)
-#define SIMD_ROUND(x) _mm512_round_ps(x, _MM_FROUND_NINT)
+// Use _mm512_roundscale_ps instead of _mm512_round_ps (GCC compatibility)
+// _MM_FROUND_NINT = 0 (round to nearest integer)
+#define SIMD_ROUND(x) _mm512_roundscale_ps(x, 0)
 #define SIMD_WIDTH 16
 
 #elif defined(__AVX256__)

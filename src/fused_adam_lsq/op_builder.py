@@ -55,10 +55,12 @@ class TorchCPUOpBuilder:
             except ImportError:
                 cpu_info = {'flags': ''}
 
-            if 'avx512' in cpu_info.get('flags', '') or 'avx512f' in cpu_info.get('flags', ''):
-                args.append('-D__AVX512__')
+            # Use actual compiler flags, not manual macro definitions
+            # This ensures __AVX512F__ and __AVX2__ are properly defined by the compiler
+            if 'avx512f' in cpu_info.get('flags', ''):
+                args.append('-mavx512f')
             elif 'avx2' in cpu_info.get('flags', ''):
-                args.append('-D__AVX256__')
+                args.append('-mavx2')
         else:
             # Unknown architecture, use scalar
             args.append('-march=native')
@@ -79,6 +81,12 @@ class TorchCPUOpBuilder:
 
     def load(self, verbose=False):
         from torch.utils.cpp_extension import load
+        import os
+
+        # Enable parallel compilation via MAX_JOBS environment variable
+        # Default to 8 threads if not set
+        if 'MAX_JOBS' not in os.environ:
+            os.environ['MAX_JOBS'] = '8'
 
         sources = [os.path.abspath(path) for path in self.sources()]
         extra_include_paths = [os.path.abspath(path) for path in self.include_paths()]

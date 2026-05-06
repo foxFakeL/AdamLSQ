@@ -138,9 +138,9 @@ def benchmark_large_scale():
     size = 18 * 1024 * 1024  # 100M elements
     print(f"参数量: {size} elements ({size / 1024 / 1024:.0f}MB)")
 
-    warmup = 2
-    steps = 10
-    repeat = 2
+    warmup = 20
+    steps = 50
+    repeat = 5
 
     import numpy as np
 
@@ -228,20 +228,79 @@ def benchmark_large_scale():
 
                 print(f"{rep+1:>6}/{repeat} {ds_time:>10.3f}ms {noq_time:>10.3f}ms {q8_time:>10.3f}ms {q4_time:>10.3f}ms")
 
-            # 汇总统计
+            # 汇总统计（带异常值去除）
             print(f"\n{'='*60}")
-            print(f"性能汇总 (group_size={group_size}, {repeat}次平均)")
+            print(f"性能汇总 (group_size={group_size}, {repeat}次测量)")
             print(f"{'='*60}")
 
-            ds_avg = np.mean(ds_times)
-            noq_avg = np.mean(noq_times)
-            q8_avg = np.mean(q8_times)
-            q4_avg = np.mean(q4_times)
+            # 异常值去除函数（IQR方法）
+            def remove_outliers_iqr(times):
+                """使用 IQR 方法去除异常值"""
+                times_sorted = sorted(times)
+                n = len(times_sorted)
+                if n < 4:
+                    return times_sorted, []
 
-            print(f"  DeepSpeed CPU Adam:     {ds_avg:.3f} ms/step")
-            print(f"  FusedAdam (no quant):   {noq_avg:.3f} ms/step")
-            print(f"  FusedAdam (INT8 quant): {q8_avg:.3f} ms/step")
-            print(f"  FusedAdam (INT4 quant): {q4_avg:.3f} ms/step")
+                q1_idx = n // 4
+                q3_idx = (3 * n) // 4
+                q1 = times_sorted[q1_idx]
+                q3 = times_sorted[q3_idx]
+                iqr = q3 - q1
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+
+                normal = [t for t in times_sorted if lower_bound <= t <= upper_bound]
+                outliers = [t for t in times_sorted if t < lower_bound or t > upper_bound]
+                return normal, outliers
+
+            # 原始数据统计
+            ds_raw_avg = np.mean(ds_times)
+            noq_raw_avg = np.mean(noq_times)
+            q8_raw_avg = np.mean(q8_times)
+            q4_raw_avg = np.mean(q4_times)
+
+            # 去除异常值
+            ds_normal, ds_outliers = remove_outliers_iqr(ds_times)
+            noq_normal, noq_outliers = remove_outliers_iqr(noq_times)
+            q8_normal, q8_outliers = remove_outliers_iqr(q8_times)
+            q4_normal, q4_outliers = remove_outliers_iqr(q4_times)
+
+            # 打印异常值信息
+            if ds_outliers or noq_outliers or q8_outliers or q4_outliers:
+                print(f"\n异常值检测结果:")
+                if ds_outliers:
+                    print(f"  DeepSpeed: 原始{len(ds_times)}个, 去除{len(ds_outliers)}个异常值 {[f'{v:.3f}ms' for v in ds_outliers]}")
+                if noq_outliers:
+                    print(f"  Fused(noQ): 去除{len(noq_outliers)}个异常值 {[f'{v:.3f}ms' for v in noq_outliers]}")
+                if q8_outliers:
+                    print(f"  Fused(INT8): 去除{len(q8_outliers)}个异常值 {[f'{v:.3f}ms' for v in q8_outliers]}")
+                if q4_outliers:
+                    print(f"  Fused(INT4): 去除{len(q4_outliers)}个异常值 {[f'{v:.3f}ms' for v in q4_outliers]}")
+
+            # 使用去除异常值后的数据计算平均值
+            ds_avg = np.mean(ds_normal) if ds_normal else ds_raw_avg
+            noq_avg = np.mean(noq_normal) if noq_normal else noq_raw_avg
+            q8_avg = np.mean(q8_normal) if q8_normal else q8_raw_avg
+            q4_avg = np.mean(q4_normal) if q4_normal else q4_raw_avg
+
+            # 有效样本数
+            ds_n = len(ds_normal)
+            noq_n = len(noq_normal)
+            q8_n = len(q8_normal)
+            q4_n = len(q4_normal)
+
+            print(f"\n有效样本数: DS={ds_n}, noQ={noq_n}, INT8={q8_n}, INT4={q4_n}")
+
+            # 计算标准差
+            ds_std = np.std(ds_normal) if len(ds_normal) > 1 else 0
+            noq_std = np.std(noq_normal) if len(noq_normal) > 1 else 0
+            q8_std = np.std(q8_normal) if len(q8_normal) > 1 else 0
+            q4_std = np.std(q4_normal) if len(q4_normal) > 1 else 0
+
+            print(f"\n  DeepSpeed CPU Adam:     {ds_avg:.3f} ± {ds_std:.3f} ms/step (原始: {ds_raw_avg:.3f})")
+            print(f"  FusedAdam (no quant):   {noq_avg:.3f} ± {noq_std:.3f} ms/step (原始: {noq_raw_avg:.3f})")
+            print(f"  FusedAdam (INT8 quant): {q8_avg:.3f} ± {q8_std:.3f} ms/step (原始: {q8_raw_avg:.3f})")
+            print(f"  FusedAdam (INT4 quant): {q4_avg:.3f} ± {q4_std:.3f} ms/step (原始: {q4_raw_avg:.3f})")
 
             # 与DeepSpeed对比
             print(f"\n与DeepSpeed CPU Adam对比:")
